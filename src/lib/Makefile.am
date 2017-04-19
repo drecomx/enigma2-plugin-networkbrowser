@@ -1,6 +1,10 @@
-include $(top_srcdir)/Rules-cpp.mak
+AM_CFLAGS = \
+	-Wall \
+	@LIBTIRPC_CFLAGS@
 
-AM_CFLAGS += $(LIBTIRPC_CFLAGS)
+AM_CPPFLAGS = \
+	@PYTHON_CPPFLAGS@ \
+	-include Python.h
 
 plugindir = $(libdir)/enigma2/python/Plugins/SystemPlugins/NetworkBrowser
 
@@ -10,18 +14,22 @@ nfsutils_la_SOURCES = \
 	showmount.c
 
 nfsutils_la_LDFLAGS = \
-	$(PLUGIN_LIBTOOL_FLAGS)
+	-avoid-version \
+	-module \
+	-shared
 
 nfsutils_la_LIBADD = \
-	$(LIBTIRPC_LIBS) \
-	$(PYTHON_LDFLAGS) \
+	@LIBTIRPC_LIBS@ \
+	@PYTHON_LDFLAGS@ \
 	-lnfs -lrpcsvc
 
 rpcinfo_la_SOURCES = \
 	rpcinfo.c
 
 rpcinfo_la_LIBADD = \
-	$(LIBTIRPC_LIBS)
+	@LIBTIRPC_LIBS@
 
 rpcinfo_la_LDFLAGS = \
-	$(PLUGIN_LIBTOOL_FLAGS)
+	-avoid-version \
+	-module \
+	-shared
