@@ -95,7 +95,7 @@ class AutoMount():
 			self._ensureOption(options, 'retry', 'retry=0')
 			self._ensureOption(options, 'retrans', 'retrans=1')
 			self._ensureOption(options, 'timeo', 'timeo=2')
-			if not 'tcp' not in options and 'udp' not in options:
+			if 'tcp' not in options and 'udp' not in options:
 				options.append('udp')
 
 		return options
