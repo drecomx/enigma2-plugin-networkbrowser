@@ -4,7 +4,7 @@ from Screens.MessageBox import MessageBox
 from Screens.VirtualKeyBoard import VirtualKeyBoard
 from Components.ActionMap import ActionMap
 from Components.Sources.StaticText import StaticText
-from Components.config import config, ConfigIP, NoSave, ConfigText, ConfigOnOff, ConfigPassword, ConfigSelection, getConfigListEntry, ConfigYesNo
+from Components.config import config, ConfigIP, NoSave, ConfigText, ConfigOnOff, ConfigPassword, ConfigSelection, getConfigListEntry, ConfigYesNo, configfile
 from Components.ConfigList import ConfigListScreen
 from Components.Pixmap import Pixmap
 from Components.ActionMap import ActionMap, NumberActionMap
@@ -248,6 +248,10 @@ class AutoMountEdit(Screen, ConfigListScreen):
 	def applyConfigDataAvail(self, success):
 		if success:
 			self._applyConfigMsgBox.close(True)
+			if self._cfgHddReplacement.value and config.misc.recording_allowed.value == False:
+				config.misc.recording_allowed.value = True
+				config.misc.recording_allowed.save()
+				configfile.save()
 
 	def applyConfigfinishedCB(self,data):
 		if data is True:
