@@ -1,96 +1,185 @@
 /*
  * showmount.c -- show mount information for an NFS server
- * Copyright (C) 1993 Rick Sladkey <jrs@world.std.com>
- * Copyright (C) 2017 Dream Property GmbH
  *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2, or (at your option)
- * any later version.
+ * Copyright (C) 2018 Dream Property GmbH
  *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
+ * This plugin is licensed under the Creative Commons
+ * Attribution-NonCommercial-ShareAlike 3.0 Unported
+ * License. To view a copy of this license, visit
+ * http://creativecommons.org/licenses/by-nc-sa/3.0/ or send a letter to Creative
+ * Commons, 559 Nathan Abbott Way, Stanford, California 94305, USA.
+ *
+ * Alternatively, this plugin may be distributed and executed on hardware which
+ * is licensed by Dream Property GmbH.
+ *
+ * This plugin is NOT free software. It is open source, you are allowed to
+ * modify it (if you keep the license), but it may not be commercially
+ * distributed other than under the conditions noted above.
  */
 
 #ifdef HAVE_CONFIG_H
 #include <enigma2-plugins-config.h>
 #endif
-
-#include <stdio.h>
-#include <rpc/clnt.h>
-#include <rpc/pmap_prot.h>
+#include <netinet/tcp.h>
+#include <sys/poll.h>
 #include <sys/socket.h>
-#include <netinet/in.h>
-#include <sys/time.h>
-#include <string.h>
 #include <sys/types.h>
-#include <unistd.h>
-#include <memory.h>
-#include <stdlib.h>
-#include <fcntl.h>
+#include <nfsc/libnfs.h>
+#include <nfsc/libnfs-raw.h>
+#include <nfsc/libnfs-raw-mount.h>
 
-#include <netdb.h>
-#include <arpa/inet.h>
-#include <errno.h>
-#include <getopt.h>
-#include <rpcsvc/mount.h>
-#include <unistd.h>
+extern void rpc_set_tcp_syncnt(struct rpc_context *rpc, int v);
+extern void rpc_set_timeout(struct rpc_context *rpc, int timeout);
 
-#include "nfsrpc.h"
-
-#define TOTAL_TIMEOUT	2
-
-static const char *mount_pgm_tbl[] = {
-	"showmount",
-	"mount",
-	"mountd",
-	NULL,
+struct exports_ctx {
+	int done;
+	struct exportnode *ex;
 };
 
-static rpcvers_t mount_vers_tbl[] = {
-	3, /* MOUNTVERS_NFSV3 */
-	2, /* MOUNTVERS_POSIX */
-	MOUNTVERS,
-};
-static const unsigned int max_vers_tblsz = 
-	(sizeof(mount_vers_tbl)/sizeof(mount_vers_tbl[0]));
-
-/*
- * Generate an RPC client handle connected to the mountd service
- * at @hostname, or die trying.
- *
- * Supports both AF_INET and AF_INET6 server addresses.
- */
-static CLIENT *nfs_get_mount_client(const char *hostname, rpcvers_t vers)
+static void pyexport(PyObject *result, const char *ex_dir, const struct groupnode *ex_groups)
 {
-	rpcprog_t program = nfs_getrpcbyname(MOUNTPROG, mount_pgm_tbl);
-	CLIENT *client;
-	const struct timeval to = {
-		.tv_sec = 2,
-	};
+	PyObject *dict, *dir, *groups;
+	const struct groupnode *gr;
 
-	client = clnt_create_timed(hostname, program, vers, "tcp", &to);
-	if (client)
-		return client;
-	client = clnt_create_timed(hostname, program, vers, "udp", &to);
-	if (client)
-		return client;
+	if (ex_dir == NULL)
+		return;
 
-	return NULL;
+	dict = PyDict_New();
+	if (dict == NULL)
+		return;
+
+	groups = PyList_New(0);
+	if (groups == NULL) {
+		Py_DECREF(dict);
+		return;
+	}
+
+	dir = PyString_FromString(ex_dir);
+	PyDict_SetItemString(dict, "dir", dir);
+	Py_DECREF(dir);
+	PyDict_SetItemString(dict, "groups", groups);
+	Py_DECREF(groups);
+	PyList_Append(result, dict);
+	Py_DECREF(dict);
+
+	for (gr = ex_groups; gr != NULL; gr = gr->gr_next) {
+		PyObject *name = PyString_FromString(gr->gr_name);
+		PyList_Append(groups, name);
+		Py_DECREF(name);
+	}
+}
+
+static struct groupnode *groupnode_dup(struct groupnode *gr)
+{
+	struct groupnode *copy;
+
+	copy = calloc(1, sizeof(*copy));
+	copy->gr_name = strdup(gr->gr_name);
+
+	return copy;
+}
+
+static void groupnode_free(struct groupnode *gr)
+{
+	free(gr->gr_name);
+	free(gr);
+}
+
+static struct groupnode *groups_dup(struct groupnode *gr)
+{
+	struct groupnode *copy, *list = NULL;
+
+	if (gr) {
+		copy = list = groupnode_dup(gr);
+		while (gr->gr_next) {
+			gr = gr->gr_next;
+			copy->gr_next = groupnode_dup(gr);
+			copy = copy->gr_next;
+		}
+	}
+
+	return list;
+}
+
+static void groups_free(struct groupnode *gr)
+{
+	struct groupnode *next;
+
+	while (gr) {
+		next = gr->gr_next;
+		groupnode_free(gr);
+		gr = next;
+	}
+}
+
+static struct exportnode *exportnode_dup(struct exportnode *ex)
+{
+	struct exportnode *copy;
+
+	copy = calloc(1, sizeof(*copy));
+	copy->ex_dir = strdup(ex->ex_dir);
+	copy->ex_groups = groups_dup(ex->ex_groups);
+
+	return copy;
+}
+
+static void exportnode_free(struct exportnode *ex)
+{
+	free(ex->ex_dir);
+	groups_free(ex->ex_groups);
+	free(ex);
+}
+
+static struct exportnode *exports_dup(struct exportnode *ex)
+{
+	struct exportnode *copy, *list = NULL;
+
+	if (ex) {
+		copy = list = exportnode_dup(ex);
+		while (ex->ex_next) {
+			ex = ex->ex_next;
+			copy->ex_next = exportnode_dup(ex);
+			copy = copy->ex_next;
+		}
+	}
+
+	return list;
+}
+
+static void exports_free(struct exportnode *ex)
+{
+	struct exportnode *next;
+
+	while (ex) {
+		next = ex->ex_next;
+		exportnode_free(ex);
+		ex = next;
+	}
+}
+
+static void exports_cb(struct rpc_context *rpc, int status, void *data, void *private_data)
+{
+	struct exports_ctx *ctx = private_data;
+	struct exportnode *ex = *(struct exportnode **)data;
+
+	if (status == 0)
+		ctx->ex = exports_dup(ex);
+
+	ctx->done = 1;
 }
 
 static PyObject *showmount(PyObject *self, PyObject *args)
 {
-	enum clnt_stat clnt_stat;
-	struct timeval total_timeout;
-	CLIENT *mclient;
-	groups grouplist;
-	exports exportlist;
-	int unsigned vers=0;
 	PyObject *result;
 	char *hostname;
+	int ret;
+	struct nfs_context *nfs;
+	struct rpc_context *rpc;
+	struct exportnode *ex = NULL;
+	struct exports_ctx ctx = {
+		.done = 0,
+		.ex = NULL,
+	};
 
 	if (!PyArg_ParseTuple(args, "s", &hostname)) {
 		PyErr_SetString(PyExc_TypeError, "showmount(node)");
@@ -101,79 +190,60 @@ static PyObject *showmount(PyObject *self, PyObject *args)
 	if (result == NULL)
 		return result;
 
-	Py_BEGIN_ALLOW_THREADS;
+	rpc = rpc_init_context();
+	if (rpc) {
+		Py_BEGIN_ALLOW_THREADS;
 
-	mclient = nfs_get_mount_client(hostname, mount_vers_tbl[vers]);
-	if (mclient == NULL) {
-		Py_BLOCK_THREADS;
-		Py_DECREF(result);
-		PyErr_SetString(PyExc_IOError, clnt_spcreateerror("clnt_create_timed"));
-		return NULL;
+		ret = mount_getexports_async(rpc, hostname, exports_cb, &ctx);
+		if (ret == 0) {
+			rpc_set_tcp_syncnt(rpc, 2);
+			rpc_set_timeout(rpc, 1000);
+			for (;;) {
+				struct pollfd pfd = {
+					.fd = rpc_get_fd(rpc),
+					.events = rpc_which_events(rpc),
+					.revents = 0,
+				};
+				if (poll(&pfd, 1, 1000) < 0)
+					break;
+				if (rpc_service(rpc, pfd.revents) < 0)
+					break;
+				if (ctx.done) {
+					ex = ctx.ex;
+					break;
+				}
+			}
+		}
+		rpc_destroy_context(rpc);
+
+		Py_END_ALLOW_THREADS;
 	}
-	mclient->cl_auth = nfs_authsys_create();
-	if (mclient->cl_auth == NULL) {
-		clnt_destroy(mclient);
-		Py_BLOCK_THREADS;
-		Py_DECREF(result);
-		PyErr_SetString(PyExc_IOError, "Unable to create RPC auth handle");
-		return NULL;
+
+	while (ex) {
+		pyexport(result, ex->ex_dir, ex->ex_groups);
+		ex = ex->ex_next;
 	}
-	total_timeout.tv_sec = TOTAL_TIMEOUT;
-	total_timeout.tv_usec = 0;
 
-again:
-	exportlist = NULL;
+	if (ctx.ex) {
+		exports_free(ctx.ex);
+	} else {
+		nfs = nfs_init_context();
+		if (nfs) {
+			Py_BEGIN_ALLOW_THREADS;
 
-	clnt_stat = clnt_call(mclient, MOUNTPROC_EXPORT,
-		(xdrproc_t)xdr_void, NULL,
-		(xdrproc_t)xdr_exports, &exportlist,
-		total_timeout);
-	if (clnt_stat == RPC_PROGVERSMISMATCH) {
-		if (++vers < max_vers_tblsz) {
-			CLNT_CONTROL(mclient, CLSET_VERS, &mount_vers_tbl[vers]);
-			goto again;
+			nfs_set_tcp_syncnt(nfs, 2);
+			nfs_set_timeout(nfs, 1000);
+			nfs_set_version(nfs, 4);
+			ret = nfs_mount(nfs, hostname, "/");
+			nfs_destroy_context(nfs);
+
+			Py_END_ALLOW_THREADS;
+
+			if (ret == 0)
+				pyexport(result, "/", NULL);
 		}
 	}
-	if (clnt_stat != RPC_SUCCESS) {
-		Py_BLOCK_THREADS;
-		Py_DECREF(result);
-		PyErr_SetString(PyExc_IOError, clnt_sperror(mclient, "rpc mount export"));
-		clnt_destroy(mclient);
-		return NULL;
-	}
 
-	Py_END_ALLOW_THREADS;
-
-	while (exportlist) {
-		PyObject *dict, *dir, *groups;
-
-		dict = PyDict_New();
-		if (dict == NULL)
-			break;
-		groups = PyList_New(0);
-		if (groups == NULL) {
-			Py_DECREF(dict);
-			break;
-		}
-
-		dir = PyString_FromString(exportlist->ex_dir);
-		PyDict_SetItemString(dict, "dir", dir);
-		Py_DECREF(dir);
-		PyDict_SetItemString(dict, "groups", groups);
-		Py_DECREF(groups);
-		PyList_Append(result, dict);
-		Py_DECREF(dict);
-
-		for (grouplist = exportlist->ex_groups; grouplist; grouplist = grouplist->gr_next) {
-			PyObject *name = PyString_FromString(grouplist->gr_name);
-			PyList_Append(groups, name);
-			Py_DECREF(name);
-		}
-
-		exportlist = exportlist->ex_next;
-	}
-
-	clnt_destroy(mclient);
 	return result;
 }
 

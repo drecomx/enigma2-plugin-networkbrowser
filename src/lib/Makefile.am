@@ -1,5 +1,6 @@
 AM_CFLAGS = \
 	-Wall \
+	@LIBNFS_CFLAGS@ \
 	@LIBTIRPC_CFLAGS@
 
 AM_CPPFLAGS = \
@@ -19,9 +20,8 @@ nfsutils_la_LDFLAGS = \
 	-shared
 
 nfsutils_la_LIBADD = \
-	@LIBTIRPC_LIBS@ \
-	@PYTHON_LDFLAGS@ \
-	-lnfs -lrpcsvc
+	@LIBNFS_LIBS@ \
+	@PYTHON_LDFLAGS@
 
 rpcinfo_la_SOURCES = \
 	rpcinfo.c
