@@ -21,7 +21,7 @@ nfsutils_la_LDFLAGS = \
 
 nfsutils_la_LIBADD = \
 	@LIBNFS_LIBS@ \
-	@PYTHON_LDFLAGS@
+	@PYTHON_LIBS@
 
 rpcinfo_la_SOURCES = \
 	rpcinfo.c
