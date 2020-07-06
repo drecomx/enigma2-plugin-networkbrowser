@@ -89,6 +89,7 @@ class AutoMount():
 		self._ensureOption(options, 'rsize', 'rsize=8192')
 		self._ensureOption(options, 'wsize', 'wsize=8192')
 		self._ensureOption(options, 'x-systemd.device-timeout', 'x-systemd.device-timeout=15')
+		self._ensureOption(options, 'x-systemd.mount-timeout', 'x-systemd.mount-timeout=15')
 		self._ensureOption(options, 'x-systemd.idle-timeout', 'x-systemd.idle-timeout=60')
 		self._ensureOption(options, 'soft')
 		if not cifs:
