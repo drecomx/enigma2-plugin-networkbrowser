@@ -15,7 +15,7 @@ XML_FSTAB = eEnv.resolve("${sysconfdir}/enigma2/automounts.xml")
 class AutoMount():
 	MOUNT_BASE = '/media/'
 	DEFAULT_OPTIONS_NFS = { 'isMounted': False, 'active': False, 'ip': '192.168.0.1', 'sharename': 'Sharename', 'sharedir': "/export/hdd", 'username': "", \
-							'password': "", 'mounttype' : 'nfs', 'options' : "rw,nolock,udp", 'hdd_replacement' : False }
+							'password': "", 'mounttype' : 'nfs', 'options' : "rw,nolock,tcp", 'hdd_replacement' : False }
 	DEFAULT_OPTIONS_CIFS = { 'isMounted': False, 'active': False, 'ip': '192.168.0.1', 'sharename': 'Sharename', 'sharedir': "/export/hdd", 'username': "", \
 							'password': "", 'mounttype' : 'cifs', 'options' : "rw", 'hdd_replacement' : False }
 
