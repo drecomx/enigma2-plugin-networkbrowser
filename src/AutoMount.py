@@ -134,7 +134,7 @@ class AutoMount():
 				harddiskmanager.modifyFstabEntry(remote, mountpoint, mode="add_deactivated", extopts=opts, fstype="cifs")
 		else:
 			mountpoint = AutoMount.MOUNT_BASE + data['sharename']
-			self.removeMount(mountpoint)
+			self._deactivateMount(mountpoint)
 		if callback:
 			callback(True)
 
@@ -226,6 +226,19 @@ class AutoMount():
 		finally:
 			if file is not None:
 				file.close()
+
+	def _deactivateMount(self, mountpoint, callback=None):
+		res = False
+		entry = Util.findInFstab(src=None, dst=mountpoint)
+		if entry:
+			sharename=os_path.basename(mountpoint)
+			self._unmount(mountpoint)
+			harddiskmanager.modifyFstabEntry(entry['src'], entry['dst'], mode="remove")
+			harddiskmanager.removeMountedPartition(mountpoint)
+			res = True
+		if callback is not None:
+			callback(res)
+
 
 	def removeMount(self, mountpoint, callback=None):
 		res = False
