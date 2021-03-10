@@ -64,17 +64,17 @@ class AutoMount():
 					except Exception, e:
 						Log.w("Error reading %s share: %s" %(mounttype.upper(), e))
 
-	def reload(self, callback=None):
+	def load(self):
 		Log.i()
-		# Initialize mounts to empty list
 		self._mounts = {}
 		self._numActive = 0
+		if pathExists(XML_FSTAB):
+			tree = cet_parse(XML_FSTAB).getroot()
+			self._parse(tree, ['nfs', 'cifs'], [AutoMount.DEFAULT_OPTIONS_NFS, AutoMount.DEFAULT_OPTIONS_CIFS])
 
-		if not pathExists(XML_FSTAB):
-			return
-		tree = cet_parse(XML_FSTAB).getroot()
-		self._parse(tree, ['nfs', 'cifs'], [AutoMount.DEFAULT_OPTIONS_NFS, AutoMount.DEFAULT_OPTIONS_CIFS])
-
+	 reload(self, callback=None):
+		Log.i()
+		self.load()
 		if len(self._mounts):
 			for sharename, sharedata in self._mounts.items():
 				self._applyShare(sharedata, callback)
@@ -134,7 +134,7 @@ class AutoMount():
 				harddiskmanager.modifyFstabEntry(remote, mountpoint, mode="add_deactivated", extopts=opts, fstype="cifs")
 		else:
 			mountpoint = AutoMount.MOUNT_BASE + data['sharename']
-			self.removeMount(mountpoint)
+			self._deactivateMount(mountpoint)
 		if callback:
 			callback(True)
 
@@ -164,7 +164,9 @@ class AutoMount():
 		except OSError:
 			Log.i("adding symlink failed!")
 
-	def getMounts(self):
+	def getMounts(self, load_mounts=False):
+		if load_mounts:
+			self.load()
 		return self._mounts
 
 	def getMountsAttribute(self, mountpoint, attribute):
@@ -226,6 +228,18 @@ class AutoMount():
 		finally:
 			if file is not None:
 				file.close()
+
+	def _deactivateMount(self, mountpoint, callback=None):
+		res = False
+		entry = Util.findInFstab(src=None, dst=mountpoint)
+		if entry:
+			sharename=os_path.basename(mountpoint)
+			self._unmount(mountpoint)
+			harddiskmanager.modifyFstabEntry(entry['src'], entry['dst'], mode="remove")
+			harddiskmanager.removeMountedPartition(mountpoint)
+			res = True
+		if callback is not None:
+			callback(res)
 
 	def removeMount(self, mountpoint, callback=None):
 		res = False
