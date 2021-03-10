@@ -67,7 +67,7 @@ class AutoMountView(Screen):
 
 	def showMountsList(self):
 		self.list = []
-		self.mounts = iAutoMount.getMounts()
+		self.mounts = iAutoMount.getMounts(True)
 		for sharename in self.mounts.keys():
 			mountentry = iAutoMount.mounts[sharename]
 			self.list.append(self.buildMountViewItem(mountentry))
