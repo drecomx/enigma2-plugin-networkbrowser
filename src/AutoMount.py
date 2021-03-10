@@ -72,7 +72,7 @@ class AutoMount():
 			tree = cet_parse(XML_FSTAB).getroot()
 			self._parse(tree, ['nfs', 'cifs'], [AutoMount.DEFAULT_OPTIONS_NFS, AutoMount.DEFAULT_OPTIONS_CIFS])
 
-	 reload(self, callback=None):
+	def reload(self, callback=None):
 		Log.i()
 		self.load()
 		if len(self._mounts):
