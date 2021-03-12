@@ -142,7 +142,7 @@ class AutoMount():
 		Log.d()
 		for sharename, data in self._mounts.items():
 			mountpoint = AutoMount.MOUNT_BASE + sharename
-			data['isMounted'] = True
+			data['isMounted'] = Util.findInMtab(dst=mountpoint)
 			desc = data['sharename']
 			if data['hdd_replacement']: #hdd replacement hack
 				self._linkAsHdd(mountpoint)
@@ -167,6 +167,8 @@ class AutoMount():
 	def getMounts(self, load_mounts=False):
 		if load_mounts:
 			self.load()
+			for sharename in self._mounts:
+				self._mounts[sharename]["isMounted"] = Util.findInMtab(dst=AutoMount.MOUNT_BASE + sharename)
 		return self._mounts
 
 	def getMountsAttribute(self, mountpoint, attribute):
