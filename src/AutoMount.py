@@ -17,7 +17,7 @@ class AutoMount():
 	DEFAULT_OPTIONS_NFS = { 'isMounted': False, 'active': False, 'ip': '192.168.0.1', 'sharename': 'Sharename', 'sharedir': "/export/hdd", 'username': "", \
 							'password': "", 'mounttype' : 'nfs', 'options' : "rw,nolock,tcp", 'hdd_replacement' : False }
 	DEFAULT_OPTIONS_CIFS = { 'isMounted': False, 'active': False, 'ip': '192.168.0.1', 'sharename': 'Sharename', 'sharedir': "/export/hdd", 'username': "", \
-							'password': "", 'mounttype' : 'cifs', 'options' : "rw", 'hdd_replacement' : False }
+							'password': "", 'mounttype' : 'cifs', 'options' : "rw,vers=3.0", 'hdd_replacement' : False }
 
 	"""Manages Mounts declared in a XML-Document."""
 	def __init__(self):
