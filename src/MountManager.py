@@ -56,7 +56,7 @@ class AutoMountManager(Screen):
 		self.updateList()
 		self.onShown.append(self.setWindowTitle)
 		self._appContainer = eConsoleAppContainer()
-		self._appClosed_conn = self._appContainer.appClosed.connect(self._onApplyHostnameFinished)
+		self._appClosed_conn = self._appContainer.appClosed.connect(self._onContainerFinished)
 
 
 	def setWindowTitle(self):
@@ -118,8 +118,15 @@ class AutoMountManager(Screen):
 		self._appContainer.execute(*cmd)
 		self._applyHostnameMsgBox = self.session.openWithCallback(self._onApplyHostnameFinished, MessageBox, _("Please wait while the new hostname is being applied..."), type = MessageBox.TYPE_INFO, enable_input = False)
 
-
+	def _onContainerFinished(self,data):
+		if data == 0:
+			self._applyHostnameMsgBox.close(True)
+		else:
+			self._applyHostnameMsgBox.close(False)
+	
 	def _onApplyHostnameFinished(self,data):
 		if data:
-			self.session.open(MessageBox, _("Hostname has been applied!"), type = MessageBox.TYPE_INFO, timeout = 10, default = False)
+			self.session.open(MessageBox, _("Hostname has been applied!"), type = MessageBox.TYPE_INFO, timeout = 10)
+		else:
+			self.session.open(MessageBox, _("Error while hostname is being applied!"), type = MessageBox.TYPE_INFO, timeout = 10)
 
